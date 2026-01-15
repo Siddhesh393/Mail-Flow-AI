@@ -1,0 +1,33 @@
+
+---
+
+# 📄 `.gitignore`
+
+```gitignore
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+venv/
+.env/
+
+# Google / OAuth secrets
+credentials.json
+gmail_credentials.json
+token.json
+
+# Config (keep example only)
+config/config.json
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
