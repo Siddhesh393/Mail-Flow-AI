@@ -1,95 +1,124 @@
-# Mail Flow AI 🤖📧
+# 📧 MailFlow AI 🤖  
+*A Confidence-Based Autonomous Email Agent*
 
-Mail Flow AI is a **human-only, agentic email assistant** that reads incoming Gmail messages, detects whether they were written by real humans, drafts intelligent replies using a **local LLaMA model**, and sends responses **only when explicitly approved**.
+MailFlow AI is an **agentic email automation system** that reads incoming Gmail messages, filters out non-human emails, drafts **complete and confident replies using Google Gemini**, and **automatically sends replies only when the model is sufficiently confident**.
 
-This project is designed with **safety, control, and transparency** in mind — no blind auto-replies.
-
----
-
-## ✨ Features
-
-- 📥 **Gmail Inbox Ingestion**
-  - Reads unread emails via Gmail API
-  - Deduplicates and stores state in Google Sheets
-
-- 🧠 **Human-only Detection**
-  - Filters out newsletters, bots, system emails, and marketing
-  - Uses email headers + structural heuristics
-  - Optional LLaMA arbitration for edge cases
-
-- ✍️ **AI Drafting (Local LLaMA)**
-  - Uses Ollama + LLaMA (no paid APIs)
-  - Configurable tone and safety keywords
-  - Outputs confidence score per draft
-
-- 🧾 **Human-in-the-loop Approval**
-  - Drafts are stored in Google Sheets
-  - Emails are sent **only when approved = `SEND`**
-  - No accidental replies
-
-- 📊 **Google Sheets as State & Audit Log**
-  - Inbox queue
-  - Drafts
-  - Sent log
+The system is designed to be:
+- **Autonomous** (no placeholders, no follow-up questions)
+- **Safe** (confidence-gated autosend)
+- **Transparent** (Google Sheets as the source of truth)
 
 ---
 
-## 🧠 Architecture Overview
+## ✨ Key Features
 
-```text 
+### 📥 Gmail Inbox Ingestion
+- Reads unread emails via **Gmail API**
+- Deduplicates emails using message IDs
+- Stores inbox state in Google Sheets
+
+### 🧠 Human-Only Detection
+- Filters newsletters, system emails, bots, and promotions
+- Uses header patterns + structural heuristics
+- Ensures replies are only drafted for real human emails
+
+### ✍️ AI Email Drafting (Gemini)
+- Uses **Google Gemini (latest SDK)**
+- Produces **complete, ready-to-send replies**
+- No placeholders like `[Your Name]`
+- No “please suggest…” questions
+- Always signs emails correctly
+
+### 🚀 Confidence-Based Autosend
+- Each draft includes a confidence score
+- Emails are auto-sent **only if confidence ≥ threshold**
+- Low-confidence drafts are retained for review
+
+### 📊 Google Sheets as State & Audit Log
+- `inbox_queue` → ingestion & filtering
+- `drafts` → drafted replies + confidence
+- `sent_log` → delivery status
+
+---
+
+## 🧠 System Architecture
+
+```text
 Gmail Inbox
-↓
+   ↓
 Email Ingestion Agent
-↓
+   ↓
 Google Sheets (inbox_queue)
-↓
+   ↓
 Orchestrator Agent
-├─ Human Detection
-├─ LLaMA Composer
-↓
+├─ Human Email Filter
+├─ Gemini Composer
+├─ Confidence Gate
+   ↓
 Google Sheets (drafts)
-↓ (approved = SEND)
+   ↓ (confidence ≥ threshold)
 Auto Sender Agent
-↓
+   ↓
 Gmail Reply
-↓
+   ↓
 Google Sheets (sent_log)
 ```
-
----
 
 ## 🧰 Tech Stack
 
 - **Python 3.10+**
+- **Google Gemini API** (LLM)
 - **Gmail API** (OAuth)
 - **Google Sheets API** (Service Account)
-- **Ollama + LLaMA 3.x**
-- **gspread**
-- **requests**
+- **Google Drive API**
+
 
 ---
+
 
 ## 📁 Project Structure
 
 ```text
-Mail Flow AI/
+MailFlow AI/
 ├── agents/
-│ ├── composer.py
-│ ├── orchestrator.py
-│ ├── email_io.py
-│ └── email_sender.py
+│   ├── composer.py          # Gemini-powered email drafting
+│   ├── email_io.py          # Gmail inbox ingestion
+│   ├── email_sender.py      # Gmail reply sender
+│   └── orchestrator.py      # Main control agent
 │
 ├── config/
-│ ├── config.json
-│ ├── settings.py
-│ └── sheets.py
+│   ├── config.example.json  # Safe, versioned config template
+│   ├── settings.py          # Config loader
+│   └── sheets.py            # Sheets access layer
 │
 ├── utils/
-│ ├── human_check.py
-│ └── time.py
+│   ├── google_auth.py       # Central OAuth handler (Gmail + Sheets)
+│   ├── human_check.py       # Human email detection
+│   └── time.py              # Timestamp utilities
 │
-├── main.py
+├── main.py                  # Entry point
 ├── requirements.txt
 ├── README.md
 └── .gitignore
+
 ```
+## 🔐 Files Not Included
+
+For security reasons, the following files are **intentionally NOT included** in this repository.  
+You must create or download them locally for the project to work.
+
+These files contain secrets or runtime credentials and are ignored via `.gitignore`:
+
+- `.env`  
+  Stores environment variables (e.g., API keys)
+
+- `gmail_credentials.json`  
+  Google OAuth 2.0 client credentials (downloaded from Google Cloud Console)
+
+- `token.json`  
+  OAuth access & refresh tokens (auto-generated on first run)
+
+- `config/config.json`  
+  Local configuration file with personal details and thresholds
+
+---
