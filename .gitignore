@@ -1,33 +1,51 @@
-
----
-
-# 📄 `.gitignore`
-
-```gitignore
+# ============================
 # Python
+# ============================
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
-.env
+*.pyc
 venv/
 .env/
 
-# Google / OAuth secrets
-credentials.json
+# ============================
+# Environment variables
+# ============================
+.env
+.env.*
+
+# ============================
+# Google / OAuth / API Secrets
+# ============================
 gmail_credentials.json
+credentials.json
 token.json
+*.pem
+*.key
 
-# Config (keep example only)
-config/config.json
-
-# Logs
+# ============================
+# Runtime & Generated Files
+# ============================
 *.log
+*.sqlite
+*.db
 
-# OS
-.DS_Store
-Thumbs.db
+# ============================
+# Config (keep only example)
+# ============================
+config/config.json
+!config/config.example.json
 
-# IDE
+# ============================
+# IDE / Editor
+# ============================
 .vscode/
 .idea/
+*.swp
+
+# ============================
+# OS
+# ============================
+.DS_Store
+Thumbs.db
