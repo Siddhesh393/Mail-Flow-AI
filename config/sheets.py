@@ -1,18 +1,14 @@
 import gspread
-from google.oauth2.service_account import Credentials
+from utils.google_auth import get_credentials
 
-SCOPES = [
-    "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive"
-]
+SPREADSHEET_NAME = "MailFlow_AI_Tracker"
+
 
 def get_sheets_client():
-    creds = Credentials.from_service_account_file(
-        "credentials.json",
-        scopes=SCOPES
-    )
+    creds = get_credentials()
     return gspread.authorize(creds)
 
-def get_sheet(sheet_name="agentic_email_system"):
+
+def get_sheet(sheet_name: str = SPREADSHEET_NAME):
     client = get_sheets_client()
     return client.open(sheet_name)

@@ -3,49 +3,49 @@ import base64
 import json
 from email.utils import parsedate_to_datetime
 
-from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
-from google.oauth2.credentials import Credentials
-
+from utils.google_auth import get_credentials
 from config.sheets import get_sheet
 
 SCOPES = ["https://www.googleapis.com/auth/gmail.modify"]
 TOKEN_FILE = "token.json"
+CREDENTIALS_FILE = "gmail_credentials.json"
+
+MAX_CELL_CHARS = 45000  # keep buffer below 50k
+
+def truncate(text: str, limit: int = MAX_CELL_CHARS) -> str:
+    if not text:
+        return ""
+    if len(text) <= limit:
+        return text
+    return text[:limit] + "\n\n[TRUNCATED]"
 
 
 def get_gmail_service():
-    creds = None
-
-    if os.path.exists(TOKEN_FILE):
-        creds = Credentials.from_authorized_user_file(TOKEN_FILE, SCOPES)
-
-    if not creds or not creds.valid:
-        flow = InstalledAppFlow.from_client_secrets_file(
-            "gmail_credentials.json",
-            SCOPES
-        )
-        creds = flow.run_local_server(port=0)
-
-        # 💾 Save token for reuse
-        with open(TOKEN_FILE, "w", encoding="utf-8") as token:
-            token.write(creds.to_json())
-
+    creds = get_credentials()
     return build("gmail", "v1", credentials=creds)
 
 
 def extract_body(payload):
-    if "data" in payload.get("body", {}):
-        return base64.urlsafe_b64decode(
-            payload["body"]["data"]
-        ).decode("utf-8", errors="ignore")
+    """Recursively extract text/plain email body"""
+    if payload.get("mimeType") == "text/plain":
+        data = payload.get("body", {}).get("data")
+        if data:
+            return base64.urlsafe_b64decode(data).decode("utf-8", errors="ignore")
 
     for part in payload.get("parts", []):
-        if part.get("mimeType") == "text/plain":
-            return base64.urlsafe_b64decode(
-                part["body"]["data"]
-            ).decode("utf-8", errors="ignore")
+        text = extract_body(part)
+        if text:
+            return text
 
     return ""
+
+
+def safe_parse_date(date_str):
+    try:
+        return parsedate_to_datetime(date_str).isoformat()
+    except Exception:
+        return ""
 
 
 def fetch_unread_emails(max_results=10):
@@ -66,9 +66,11 @@ def fetch_unread_emails(max_results=10):
     ).execute()
 
     messages = results.get("messages", [])
+    fetched_emails = []
 
     for msg in messages:
         msg_id = msg["id"]
+
         if msg_id in existing_ids:
             continue
 
@@ -83,23 +85,38 @@ def fetch_unread_emails(max_results=10):
             for h in message["payload"]["headers"]
         }
 
+        email_data = {
+            "email_id": msg_id,
+            "thread_id": message["threadId"],
+            "from": headers.get("From", ""),
+            "subject": headers.get("Subject", ""),
+            "body": extract_body(message["payload"]),
+            "received_time": safe_parse_date(headers.get("Date")),
+            "status": "NEW",
+            "headers": headers
+        }
+
         inbox_ws.append_row([
-            msg_id,
-            message["threadId"],
-            headers.get("From", ""),
-            headers.get("Subject", ""),
-            extract_body(message["payload"]),
-            parsedate_to_datetime(headers.get("Date")).isoformat(),
-            "NEW",
+            email_data["email_id"],
+            email_data["thread_id"],
+            email_data["from"],
+            email_data["subject"],
+            truncate(email_data["body"]),                 
+            email_data["received_time"],
+            email_data["status"],
             "",
             "",
-            json.dumps(headers)
+            truncate(json.dumps(headers))                  
         ])
 
 
-        # Mark as read
+        fetched_emails.append(email_data)
+
+        # Mark email as read
         service.users().messages().modify(
             userId="me",
             id=msg_id,
             body={"removeLabelIds": ["UNREAD"]}
         ).execute()
+
+    return fetched_emails

@@ -3,11 +3,23 @@ import json
 from config.sheets import get_sheet
 from config.settings import load_settings
 from agents.composer import compose_reply
+from agents.email_sender import send_reply
 from utils.time import now_iso
 from utils.human_check import looks_like_human_email
 
 
+SAFE_INTENTS = {
+    "reply",
+    "follow_up",
+    "acknowledgement",
+    "confirmation"
+}
+
+
 def run_orchestrator(limit: int = 5):
+    settings = load_settings()
+    threshold = float(settings.get("confidence_threshold", 1.0))
+
     sheet = get_sheet()
     inbox_ws = sheet.worksheet("inbox_queue")
     drafts_ws = sheet.worksheet("drafts")
@@ -15,7 +27,7 @@ def run_orchestrator(limit: int = 5):
     rows = inbox_ws.get_all_records()
     processed = 0
 
-    for idx, row in enumerate(rows, start=2):  # header row = 1
+    for idx, row in enumerate(rows, start=2):
         if processed >= limit:
             break
 
@@ -38,7 +50,7 @@ def run_orchestrator(limit: int = 5):
             headers = {}
 
         is_human = looks_like_human_email(
-            from_email=row.get("from_email", ""),
+            from_email=row.get("from", ""),
             body=body,
             headers=headers
         )
@@ -48,19 +60,24 @@ def run_orchestrator(limit: int = 5):
             inbox_ws.update_cell(idx, 8, "non_human")
             continue
 
-        # 🤖 Compose reply
+        # 🤖 Compose reply using Gemini
         result = compose_reply(
-            from_email=row.get("from_email", ""),
+            from_email=row.get("from", ""),
             subject=row.get("subject", ""),
             body=body
         )
 
+        # ✅ OPTION 2 — Confidence-based autosend
+        auto_send = result["confidence"] >= threshold
+
+        approval_status = "SEND" if auto_send else "DRAFT"
+
         drafts_ws.append_row([
-            row.get("email_id"),
-            result["draft"],
-            result["tone"],
-            result["confidence"],
-            "DRAFT",  # 👈 explicit default
+            row.get("email_id"),     # email_id
+            result["draft"],         # draft_body
+            result["tone"],          # tone
+            result["confidence"],    # confidence
+            approval_status,         # 🔥 AUTO or MANUAL
             now_iso()
         ])
 
@@ -92,7 +109,6 @@ def run_auto_sender(limit: int = 5):
         if processed >= limit:
             break
 
-        # ✅ ONLY SEND WHEN EXPLICITLY COMMANDED
         if draft.get("approved") != "SEND":
             continue
 
@@ -109,11 +125,10 @@ def run_auto_sender(limit: int = 5):
             continue
 
         try:
-            from agents.email_sender import send_reply
-
             send_reply(
                 thread_id=inbox_row["thread_id"],
-                to_email=inbox_row["from_email"],
+                message_id=email_id,
+                to_email=inbox_row["from"],
                 subject=inbox_row["subject"],
                 body=draft["draft_body"]
             )

@@ -1,30 +1,38 @@
 import json
-import requests
+import os
+
+from dotenv import load_dotenv
+from google import genai
 
 from config.settings import load_settings
 
-OLLAMA_URL = "http://localhost:11434/api/generate"
-MODEL_NAME = "llama3.1:latest"  # change if needed
+load_dotenv()
+
+# Initialize Gemini client (NEW SDK STYLE)
+client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 
-def call_llama(prompt: str) -> str:
-    response = requests.post(
-        OLLAMA_URL,
-        json={
-            "model": MODEL_NAME,
-            "prompt": prompt,
-            "stream": False
-        },
-        timeout=120
+def call_gemini(prompt: str) -> str:
+    response = client.models.generate_content(
+        model="gemini-2.5-flash-lite",
+        contents=prompt,
+        config={
+            "temperature": 0.4,
+            "response_mime_type": "application/json"
+        }
     )
-    response.raise_for_status()
-    return response.json()["response"]
+
+    return response.text.strip()
 
 
 def compose_reply(from_email: str, subject: str, body: str) -> dict:
     settings = load_settings()
 
+    sender_name = settings.get("sender_name", "Siddhesh")
     tone = settings.get("default_tone", "polite")
+    availability = settings.get("default_availability", "")
+    signature = settings.get("email_signature", f"Best regards,\n{sender_name}")
+
     blocked_keywords = settings.get("block_keywords", [])
 
     body_lower = body.lower()
@@ -39,24 +47,35 @@ def compose_reply(from_email: str, subject: str, body: str) -> dict:
         }
 
     prompt = f"""
-You are an intelligent email assistant.
+You are an autonomous email assistant writing on behalf of {sender_name}.
 
-Your task:
-1. Understand the email
-2. Identify the intent
-3. Write a reply in a {tone} tone
-4. Estimate confidence (0.0 to 1.0)
+STRICT RULES (NO EXCEPTIONS):
+- Do NOT ask questions that require human input.
+- Do NOT use placeholders or brackets of any kind.
+- Do NOT say "please let me know" or "feel free to".
+- Make reasonable assumptions and proceed confidently.
+- If a meeting is mentioned, propose concrete availability directly.
+- Always produce a complete, ready-to-send email.
+- Always sign with the exact signature provided.
 
-EMAIL:
+Tone: {tone}
+
+Default availability (use when scheduling is implied):
+{availability}
+
+Signature (MUST USE EXACTLY):
+{signature}
+
+EMAIL TO RESPOND TO:
 From: {from_email}
 Subject: {subject}
 Body:
 {body}
 
-IMPORTANT:
-Respond ONLY in valid JSON.
-Do NOT add explanations.
-Do NOT wrap in markdown.
+OUTPUT REQUIREMENTS:
+- Respond ONLY in valid JSON
+- No markdown
+- No explanations
 
 JSON format:
 {{
@@ -66,9 +85,9 @@ JSON format:
 }}
 """
 
-    raw_output = call_llama(prompt).strip()
 
     try:
+        raw_output = call_gemini(prompt)
         data = json.loads(raw_output)
     except Exception:
         return {
@@ -82,5 +101,5 @@ JSON format:
         "draft": data.get("draft", ""),
         "tone": tone,
         "intent": data.get("intent", "unknown"),
-        "confidence": float(data.get("confidence", 0))
+        "confidence": float(data.get("confidence", 0.0))
     }
